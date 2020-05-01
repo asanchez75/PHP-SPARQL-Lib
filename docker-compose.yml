@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+    web:
+        image: php:7.2-apache
+        volumes:
+            - ".:/var/www/html/"
+        ports:
+            - "89:80"
+        restart: always
+        environment:
+            - COLUMNS=236
+            - LINES=66
