@@ -10,7 +10,7 @@
 
 # to document: CGIParams
 
-function sparql_connect( $endpoint ) { return new sparql_connection( $endpoint ); }
+function sparql_connect( $endpoint, $user, $password ) { return new sparql_connection( $endpoint, $user, $password ); }
 
 function sparql_ns( $short, $long, $db = null ) { return _sparql_a_connection( $db )->ns( $short, $long ); }
 function sparql_query( $sparql, $db = null ) { return _sparql_a_connection( $db )->query( $sparql ); }
@@ -24,9 +24,9 @@ function sparql_field_name( $result, $i ) { return $result->field_name( $i ); }
 
 function sparql_fetch_all( $result ) { return $result->fetch_all(); }
 
-function sparql_get( $endpoint, $sparql ) 
+function sparql_get( $endpoint, $user, $password, $sparql) 
 { 
-	$db = sparql_connect( $endpoint );
+	$db = sparql_connect( $endpoint, $user, $password);
 	if( !$db ) { return; }
 	$result = $db->query( $sparql );
 	if( !$result ) { return; }
@@ -62,9 +62,11 @@ class sparql_connection
 	var $params = null;
 	# capabilities are either true, false or null if not yet tested.
 
-	function __construct( $endpoint )
+	function __construct( $endpoint, $user, $password )
 	{
 		$this->endpoint = $endpoint;
+		$this->user = $user;
+		$this->password = $password;
 		global $sparql_last_connection;
 		$sparql_last_connection = $this;
 	}
@@ -128,13 +130,60 @@ class sparql_connection
 		{
 			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout );
 		}
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-		curl_setopt($ch, CURLOPT_HTTPHEADER,array (
-			"Accept: application/sparql-results+xml"
-		));
+        curl_setopt($ch,CURLOPT_URL, $url);
+        curl_setopt($ch,CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch,CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch,CURLOPT_FOLLOWLOCATION, false);
+        curl_setopt($ch,CURLOPT_CONNECTTIMEOUT, 30);
+        curl_setopt($ch,CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_HEADER, 1);
+        $first_response = curl_exec($ch);
+        $info = curl_getinfo($ch);
+        preg_match('/www-authenticate: Digest (.*)/', $first_response, $matches);
+        if(!empty($matches))
+        {
+          $auth_header = $matches[1];
+          $auth_header_array = explode(',', $auth_header);
+          $parsed = array();
+
+          foreach ($auth_header_array as $pair)
+          {
+            $vals = explode('=', $pair);
+            $parsed[trim($vals[0])] = trim($vals[1], '" ');
+          }
+
+          $response_realm     = (isset($parsed['realm'])) ? $parsed['realm'] : "";
+          $response_nonce     = (isset($parsed['nonce'])) ? $parsed['nonce'] : "";
+          $response_opaque    = (isset($parsed['opaque'])) ? $parsed['opaque'] : "";
+
+          $authenticate1 = md5($this->user.":".$response_realm.":".$this->password);
+          $authenticate2 = md5("POST:".$url);
+
+          $authenticate_response = md5($authenticate1.":".$response_nonce.":".$authenticate2);
+
+          $request = sprintf('Authorization: Digest username="%s", realm="%s", nonce="%s", opaque="%s", uri="%s", response="%s"',
+          $this->user, $response_realm, $response_nonce, $response_opaque, $url, $authenticate_response);
+
+          $request_header = array($request);
+          $request_header[] = 'Accept: application/sparql-results+xml';
+
+          $ch = curl_init();
+          curl_setopt($ch,CURLOPT_URL, $url);
+          curl_setopt($ch,CURLOPT_SSL_VERIFYPEER, false);
+          curl_setopt($ch,CURLOPT_SSL_VERIFYHOST, false);
+          curl_setopt($ch,CURLOPT_RETURNTRANSFER, 1);
+          curl_setopt($ch,CURLOPT_FOLLOWLOCATION, false);
+          curl_setopt($ch,CURLOPT_TIMEOUT, 30);
+          curl_setopt($ch,CURLOPT_CONNECTTIMEOUT, 30);
+          curl_setopt($ch,CURLOPT_CUSTOMREQUEST, "POST");
+          curl_setopt($ch, CURLOPT_HTTPHEADER, $request_header);
+
 
 		$output = curl_exec($ch);      
-		$info = curl_getinfo($ch);
+        $info = curl_getinfo($ch);
+        }
+        $curl_error = curl_error($ch);
 		if(curl_errno($ch))
 		{
 			$this->errno = curl_errno( $ch );
