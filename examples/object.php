@@ -1,11 +1,11 @@
 <?php
 require_once( "sparqllib.php" );
 
-$db = sparql_connect( "http://rdf.ecs.soton.ac.uk/sparql/" );
+$db = sparql_connect( "http://localhost:8890/sparql/", "dba", "dba" );
 if( !$db ) { print $db->errno() . ": " . $db->error(). "\n"; exit; }
 $db->ns( "foaf","http://xmlns.com/foaf/0.1/" );
 
-$sparql = "SELECT * WHERE { ?person a foaf:Person . ?person foaf:name ?name } LIMIT 5";
+$sparql = "SELECT * WHERE { ?s ?p ?o } LIMIT 5";
 $result = $db->query( $sparql ); 
 if( !$result ) { print $db->errno() . ": " . $db->error(). "\n"; exit; }
 

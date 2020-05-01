@@ -1,11 +1,12 @@
 <?php
 require_once( "sparqllib.php" );
 
+
 $data = sparql_get( 
-	"http://rdf.ecs.soton.ac.uk/sparql/",
+	"http://localhost:8890/sparql","dba", "dba", 
 	"
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-SELECT * WHERE { ?person a foaf:Person . ?person foaf:name ?name } LIMIT 5
+SELECT * WHERE {?s ?p ?o } LIMIT 5
 " );
 if( !isset($data) )
 {
